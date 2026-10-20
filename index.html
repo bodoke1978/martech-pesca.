@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#08202f">
+<title>Martech-pesca</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  --noche:#08202f;      /* fondo de barras */
+  --panel:#0f3347;      /* paneles y chips */
+  --linea:#1d4b66;      /* bordes */
+  --espuma:#e9f3f7;     /* texto */
+  --tenue:#8fb0c2;      /* texto secundario */
+  --agua:#38c6d9;       /* acento / activo */
+  --coral:#ff6a4d;      /* cruz y alertas */
+  color-scheme: dark;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--noche);color:var(--espuma);
+  font-family:"Avenir Next","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;overflow:hidden}
+#mapa{position:absolute;inset:0;background:#0b2a3c}
+.leaflet-container{font-family:inherit;background:#0b2a3c}
+.leaflet-control-attribution{font-size:10px;background:rgba(8,32,47,.7)!important;color:var(--tenue)!important}
+.leaflet-control-attribution a{color:var(--tenue)!important}
+
+/* barra superior */
+#top{position:absolute;z-index:500;left:0;right:0;top:0;
+  padding:calc(env(safe-area-inset-top) + 8px) 10px 8px;display:flex;gap:8px;align-items:stretch;
+  background:linear-gradient(to bottom,rgba(8,32,47,.92),rgba(8,32,47,0));pointer-events:none}
+.chip{pointer-events:auto;background:var(--panel);border:1px solid var(--linea);border-radius:10px;padding:6px 10px;
+  font-variant-numeric:tabular-nums;line-height:1.2}
+#vel{min-width:84px}
+#vel b{display:block;font-size:24px;font-weight:700;letter-spacing:-.5px}
+#vel small{color:var(--tenue);font-size:12px}
+#coord{flex:1;display:flex;flex-direction:column;justify-content:center;font-size:15px;font-weight:600;cursor:pointer}
+#coord small{color:var(--tenue);font-weight:400;font-size:12px}
+
+/* cruz central */
+#cruz{position:absolute;z-index:450;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;pointer-events:none}
+#cruz::before,#cruz::after{content:"";position:absolute;background:var(--coral);box-shadow:0 0 0 1px rgba(8,32,47,.85)}
+#cruz::before{left:12px;top:0;width:2px;height:26px}
+#cruz::after{top:12px;left:0;height:2px;width:26px}
+
+/* botones laterales */
+#lado{position:absolute;z-index:500;right:10px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:8px}
+.btn{width:46px;height:46px;border-radius:12px;border:1px solid var(--linea);background:var(--panel);color:var(--espuma);
+  display:grid;place-items:center;cursor:pointer;padding:0}
+.btn:active{background:var(--linea)}
+.btn svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.btn:focus-visible,.fila:focus-within,input:focus-visible{outline:2px solid var(--agua);outline-offset:2px}
+
+/* hoja de capas */
+#hoja{position:absolute;z-index:600;left:0;right:0;bottom:0;background:var(--noche);border-top:1px solid var(--linea);
+  border-radius:16px 16px 0 0;padding:14px 14px calc(env(safe-area-inset-bottom) + 14px);
+  transform:translateY(105%);transition:transform .25s ease;max-height:75%;overflow:auto}
+#hoja.abierta{transform:none}
+#hoja h2{margin:0 0 10px;font-size:17px;display:flex;justify-content:space-between;align-items:center}
+#hoja h2 button{background:none;border:0;color:var(--tenue);font-size:15px;padding:6px;cursor:pointer}
+.fila{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--linea)}
+.fila:first-of-type{border-top:0}
+.fila .txt{flex:1}
+.fila .txt b{display:block;font-size:15px}
+.fila .txt span{font-size:12.5px;color:var(--tenue)}
+.leyenda{width:46px;height:10px;border-radius:5px;flex:none}
+.sw{position:relative;width:46px;height:26px;flex:none}
+.sw input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer;width:100%;height:100%}
+.sw i{position:absolute;inset:0;border-radius:13px;background:var(--linea);transition:background .15s}
+.sw i::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--espuma);transition:transform .15s}
+.sw input:checked+i{background:var(--agua)}
+.sw input:checked+i::after{transform:translateX(20px)}
+.ajuste{padding:4px 0 12px;font-size:12.5px;color:var(--tenue)}
+.ajuste input[type=range]{width:100%;accent-color:var(--agua)}
+.pie{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12.5px;color:var(--tenue)}
+.pie button{background:none;border:1px solid var(--linea);color:var(--espuma);border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer}
+
+/* aviso */
+#aviso{position:absolute;z-index:700;left:50%;bottom:calc(env(safe-area-inset-bottom) + 76px);transform:translateX(-50%);
+  background:var(--panel);border:1px solid var(--coral);border-radius:10px;padding:8px 12px;font-size:13px;max-width:88%;
+  opacity:0;pointer-events:none;transition:opacity .2s}
+#aviso.on{opacity:1}
+
+/* viento */
+.viento{display:flex;flex-direction:column;align-items:center;font-size:11px;font-weight:700;text-shadow:0 0 3px #000,0 0 3px #000}
+.viento svg{width:22px;height:22px;filter:drop-shadow(0 0 2px #000)}
+
+/* login */
+#login{position:absolute;z-index:1000;inset:0;background:var(--noche);display:flex;flex-direction:column;justify-content:center;padding:28px}
+#login h1{margin:0 0 4px;font-size:32px;letter-spacing:-1px}
+#login p{margin:0 0 26px;color:var(--tenue)}
+#login label{display:block;font-size:13px;color:var(--tenue);margin:14px 0 6px}
+#login input{width:100%;padding:14px;border-radius:10px;border:1px solid var(--linea);background:var(--panel);color:var(--espuma);font-size:16px}
+#login button{margin-top:22px;width:100%;padding:15px;border:0;border-radius:10px;background:var(--agua);color:#05222c;font-size:16px;font-weight:700;cursor:pointer}
+#err{color:var(--coral);font-size:14px;min-height:20px;margin-top:12px}
+#nota{margin-top:18px;font-size:12.5px;color:var(--tenue)}
+@media (prefers-reduced-motion:reduce){#hoja,#aviso,.sw i,.sw i::after{transition:none}}
+</style>
+</head>
+<body>
+
+<div id="mapa" role="application" aria-label="Mapa de pesca"></div>
+
+<div id="top">
+  <div class="chip" id="vel"><b id="velNum">--</b><small>nudos</small></div>
+  <div class="chip" id="coord" title="Tocar para copiar" role="button" tabindex="0">
+    <span id="lat">--</span><span id="lng">--</span><small id="dec">Toca para copiar</small>
+  </div>
+</div>
+
+<div id="cruz" aria-hidden="true"></div>
+
+<div id="lado">
+  <button class="btn" id="bCapas" aria-label="Abrir capas">
+    <svg viewBox="0 0 24 24"><path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="m2 13 10 5 10-5"/></svg>
+  </button>
+  <button class="btn" id="bPos" aria-label="Ir a mi posición">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><path d="M12 1v3M12 20v3M1 12h3M20 12h3"/></svg>
+  </button>
+  <button class="btn" id="bMas" aria-label="Acercar"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+  <button class="btn" id="bMenos" aria-label="Alejar"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+</div>
+
+<div id="aviso" role="status"></div>
+
+<section id="hoja" aria-label="Capas del mapa">
+  <h2>Capas <button id="bCerrar">Cerrar</button></h2>
+
+  <label class="fila">
+    <span class="leyenda" style="background:linear-gradient(90deg,#2b2bd6,#2fa3ff,#3de0a0,#ffe94d,#ff7a2e,#e0262b)"></span>
+    <span class="txt"><b>Temperatura del agua</b><span>Color por grado</span></span>
+    <span class="sw"><input type="checkbox" data-capa="sst" checked><i></i></span>
+  </label>
+  <label class="fila">
+    <span class="leyenda" style="background:repeating-linear-gradient(90deg,#fff 0 6px,transparent 6px 10px);border:1px solid var(--linea)"></span>
+    <span class="txt"><b>Cortes de temperatura</b><span>Línea donde cambia el agua</span></span>
+    <span class="sw"><input type="checkbox" data-capa="cortes" checked><i></i></span>
+  </label>
+  <div class="ajuste">Sensibilidad de los cortes
+    <input type="range" id="sens" min="12" max="90" value="36" aria-label="Sensibilidad de los cortes">
+  </div>
+  <label class="fila">
+    <span class="leyenda" style="background:linear-gradient(90deg,#1b3bd1,#1fb8d6,#38d96a,#f2e23a,#ff3b30)"></span>
+    <span class="txt"><b>Clorofila</b><span>Rojo = mayor concentración</span></span>
+    <span class="sw"><input type="checkbox" data-capa="chl"><i></i></span>
+  </label>
+  <label class="fila">
+    <span class="leyenda" style="background:linear-gradient(90deg,#9fd7ea,#3a8fc0,#0c3a6b)"></span>
+    <span class="txt"><b>Batimetría</b><span>Profundidad del fondo</span></span>
+    <span class="sw"><input type="checkbox" data-capa="bati"><i></i></span>
+  </label>
+  <label class="fila">
+    <span class="leyenda" style="background:linear-gradient(90deg,#38c6d9,#ffb347,#ff6a4d)"></span>
+    <span class="txt"><b>Viento</b><span>Dirección y nudos</span></span>
+    <span class="sw"><input type="checkbox" data-capa="viento"><i></i></span>
+  </label>
+
+  <div class="pie"><span id="fecha">Datos satelitales: --</span><button id="bSalir">Cerrar sesión</button></div>
+</section>
+
+<section id="login">
+  <h1>Martech-pesca</h1>
+  <p>Inicia sesión para ver el mapa.</p>
+  <label for="usr">Usuario</label>
+  <input id="usr" autocomplete="username" autocapitalize="none">
+  <label for="pwd">Contraseña</label>
+  <input id="pwd" type="password" autocomplete="current-password">
+  <div id="err" role="alert"></div>
+  <button id="bEntrar">Entrar</button>
+  <div id="nota">Acceso de prueba: usuario demo, contraseña martech.</div>
+</section>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+
+/* ---------- Login (PROVISORIO: reemplazar por servidor con cuentas y suscripción premium) ---------- */
+async function autenticar(usuario, clave){
+  return usuario === 'demo' && clave === 'martech';
+}
+async function entrar(){
+  const ok = await autenticar($('#usr').value.trim(), $('#pwd').value);
+  if(ok){ $('#login').style.display='none'; $('#err').textContent=''; map.invalidateSize(); cargarViento(); }
+  else $('#err').textContent = 'Usuario o contraseña incorrectos.';
+}
+$('#bEntrar').onclick = entrar;
+$('#pwd').addEventListener('keydown', e => { if(e.key==='Enter') entrar(); });
+$('#bSalir').onclick = () => { $('#hoja').classList.remove('abierta'); $('#pwd').value=''; $('#login').style.display='flex'; };
+
+/* ---------- Mapa ---------- */
+const map = L.map('mapa', {zoomControl:false, attributionControl:true, minZoom:3, maxZoom:12})
+  .setView([-33.4, -72.6], 7);
+
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
+  {maxZoom:12, maxNativeZoom:10, attribution:'Esri, GEBCO, NOAA'}).addTo(map);
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}',
+  {maxZoom:12, maxNativeZoom:10, zIndex:900, pane:'overlayPane'}).addTo(map);
+
+/* Fuentes de datos: cada capa es una sola línea, fácil de cambiar por otra fuente */
+const fechaDatos = new Date(Date.now() - 2*864e5).toISOString().slice(0,10);
+$('#fecha').textContent = 'Datos satelitales: ' + fechaDatos;
+const gibs = (capa, nivel) =>
+  `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${capa}/default/${fechaDatos}/GoogleMapsCompatible_Level${nivel}/{z}/{y}/{x}.png`;
+
+const URL_SST = gibs('GHRSST_L4_MUR_Sea_Surface_Temperature', 7);
+const URL_CHL = gibs('MODIS_Aqua_L2_Chlorophyll_A', 7);
+
+let avisados = {};
+function aviso(txt){
+  const a = $('#aviso'); a.textContent = txt; a.classList.add('on');
+  clearTimeout(aviso.t); aviso.t = setTimeout(() => a.classList.remove('on'), 3500);
+}
+function vigilar(capa, nombre){
+  let errores = 0;
+  capa.on('tileerror', () => { if(++errores === 4 && !avisados[nombre]){ avisados[nombre]=1; aviso(nombre + ': sin datos para esta zona o fecha'); } });
+  capa.on('load', () => { errores = 0; });
+  return capa;
+}
+
+const sst = vigilar(L.tileLayer(URL_SST, {maxNativeZoom:7, maxZoom:12, opacity:.85, zIndex:200}), 'Temperatura');
+const chl = vigilar(L.tileLayer(URL_CHL, {maxNativeZoom:7, maxZoom:12, opacity:.85, zIndex:210}), 'Clorofila');
+const bati = vigilar(L.tileLayer.wms('https://wms.gebco.net/mapserv?', {layers:'GEBCO_LATEST', format:'image/png', transparent:true, opacity:.75, zIndex:220}), 'Batimetría');
+
+/* Cortes: detecta saltos de color en la capa de temperatura y dibuja una línea blanca donde el agua cambia */
+let umbral = +$('#sens').value;
+const Cortes = L.GridLayer.extend({
+  createTile(c, listo){
+    const salida = document.createElement('canvas'); salida.width = salida.height = 256;
+    const img = new Image(); img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try{
+        const t = document.createElement('canvas'); t.width = t.height = 256;
+        const tx = t.getContext('2d', {willReadFrequently:true});
+        tx.drawImage(img, 0, 0, 256, 256);
+        const d = tx.getImageData(0, 0, 256, 256).data;
+        const ox = salida.getContext('2d'), oi = ox.createImageData(256, 256), od = oi.data, k = 2;
+        for(let y=0; y<256-k; y++) for(let x=0; x<256-k; x++){
+          const i=(y*256+x)*4, a=(y*256+x+k)*4, b=((y+k)*256+x)*4;
+          if(d[i+3]<200 || d[a+3]<200 || d[b+3]<200) continue;
+          const g = Math.abs(d[i]-d[a]) + Math.abs(d[i+1]-d[a+1]) + Math.abs(d[i+2]-d[a+2])
+                  + Math.abs(d[i]-d[b]) + Math.abs(d[i+1]-d[b+1]) + Math.abs(d[i+2]-d[b+2]);
+          if(g > umbral){ od[i]=255; od[i+1]=255; od[i+2]=255; od[i+3]=240; }
+        }
+        ox.putImageData(oi, 0, 0);
+      }catch(e){ if(!avisados.cortes){ avisados.cortes=1; aviso('Cortes: el navegador bloqueó la lectura de la capa'); } }
+      listo(null, salida);
+    };
+    img.onerror = () => listo(null, salida);
+    img.src = L.Util.template(URL_SST, {z:c.z, x:c.x, y:c.y});
+    return salida;
+  }
+});
+const cortes = new Cortes({maxNativeZoom:7, maxZoom:12, zIndex:300});
+$('#sens').addEventListener('input', e => { umbral = +e.target.value; });
+$('#sens').addEventListener('change', () => { if(map.hasLayer(cortes)) cortes.redraw(); });
+
+/* Viento: flechas en una grilla sobre la vista actual (Open-Meteo) */
+const viento = L.layerGroup();
+function colorViento(n){ return n < 10 ? '#38c6d9' : n < 20 ? '#ffb347' : '#ff6a4d'; }
+let tViento;
+async function cargarViento(){
+  if(!map.hasLayer(viento) || map.getZoom() < 5) return;
+  const b = map.getBounds(), filas = 6, cols = 5, lats = [], lons = [];
+  for(let i=0;i<filas;i++) for(let j=0;j<cols;j++){
+    lats.push((b.getSouth() + (b.getNorth()-b.getSouth())*(i+.5)/filas).toFixed(2));
+    lons.push((b.getWest()  + (b.getEast()-b.getWest())*(j+.5)/cols).toFixed(2));
+  }
+  try{
+    const u = `https://api.open-meteo.com/v1/forecast?latitude=${lats.join(',')}&longitude=${lons.join(',')}`
+            + `&current=wind_speed_10m,wind_direction_10m&wind_speed_unit=kn`;
+    const r = await fetch(u); if(!r.ok) throw 0;
+    const j = await r.json(), lista = Array.isArray(j) ? j : [j];
+    viento.clearLayers();
+    lista.forEach(p => {
+      const v = p.current.wind_speed_10m, dir = p.current.wind_direction_10m, col = colorViento(v);
+      const html = `<svg viewBox="0 0 24 24" style="transform:rotate(${dir+180}deg)"><path d="M12 2v18M5 9l7-7 7 7" fill="none" stroke="${col}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span style="color:${col}">${Math.round(v)}</span>`;
+      L.marker([p.latitude, p.longitude], {interactive:false, icon:L.divIcon({className:'viento', html, iconSize:[26,36], iconAnchor:[13,18]})}).addTo(viento);
+    });
+  }catch(e){ aviso('Viento: no se pudo cargar. Revisa tu conexión.'); }
+}
+map.on('moveend', () => { clearTimeout(tViento); tViento = setTimeout(cargarViento, 600); });
+
+/* ---------- Selector de capas ---------- */
+const capas = {sst, cortes, chl, bati, viento};
+document.querySelectorAll('[data-capa]').forEach(cb => {
+  const capa = capas[cb.dataset.capa];
+  const aplicar = () => { if(cb.checked){ capa.addTo(map); if(capa===viento) cargarViento(); } else map.removeLayer(capa); };
+  cb.addEventListener('change', aplicar); aplicar();
+});
+$('#bCapas').onclick = () => $('#hoja').classList.add('abierta');
+$('#bCerrar').onclick = () => $('#hoja').classList.remove('abierta');
+
+/* ---------- Cruz y coordenadas ---------- */
+function gmm(v, esLat){
+  const h = esLat ? (v<0?'S':'N') : (v<0?'O':'E'), a = Math.abs(v), g = Math.floor(a), m = (a-g)*60;
+  return `${g}°${m.toFixed(3).padStart(6,'0')}' ${h}`;
+}
+function actualizarCoord(){
+  const c = map.getCenter();
+  $('#lat').textContent = gmm(c.lat, true);
+  $('#lng').textContent = gmm(c.lng, false);
+  $('#dec').textContent = `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}`;
+}
+map.on('move', actualizarCoord); actualizarCoord();
+async function copiar(){
+  const c = map.getCenter(), t = `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}`;
+  try{ await navigator.clipboard.writeText(t); aviso('Coordenada copiada'); }catch(e){ aviso(t); }
+}
+$('#coord').onclick = copiar;
+$('#coord').addEventListener('keydown', e => { if(e.key==='Enter') copiar(); });
+
+/* ---------- Posición y velocidad de la embarcación ---------- */
+let primeraPos = true, marcador;
+if('geolocation' in navigator){
+  navigator.geolocation.watchPosition(p => {
+    const kn = p.coords.speed != null ? p.coords.speed * 1.943844 : null;
+    $('#velNum').textContent = kn != null ? kn.toFixed(1) : '0.0';
+    const ll = [p.coords.latitude, p.coords.longitude];
+    if(!marcador) marcador = L.circleMarker(ll, {radius:7, color:'#08202f', weight:2, fillColor:'#38c6d9', fillOpacity:1}).addTo(map);
+    else marcador.setLatLng(ll);
+    if(primeraPos){ primeraPos = false; map.setView(ll, 9); }
+    window._pos = ll;
+  }, () => { $('#velNum').textContent = '--'; }, {enableHighAccuracy:true, maximumAge:2000});
+}
+$('#bPos').onclick = () => window._pos ? map.setView(window._pos, Math.max(map.getZoom(), 9)) : aviso('Esperando la señal GPS');
+$('#bMas').onclick = () => map.zoomIn();
+$('#bMenos').onclick = () => map.zoomOut();
+</script>
+</body>
+</html>

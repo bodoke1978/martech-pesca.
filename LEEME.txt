@@ -1,0 +1,15 @@
+MARTECH-PESCA - COMO OBTENER EL APK (sin instalar nada en tu computador)
+
+1. Crea una cuenta gratis en https://github.com
+2. Crea un repositorio nuevo (boton "New"), llamado martech-pesca.
+3. Sube TODO el contenido de esta carpeta al repositorio
+   (boton "Add file" > "Upload files"). Incluye la carpeta oculta .github
+   y la carpeta www.
+4. Entra a la pestana "Actions". Si pide activarlas, acepta.
+5. Elige "Compilar APK" > "Run workflow". Espera unos 5 a 8 minutos.
+6. Cuando termine con check verde, abre esa ejecucion y baja
+   "Martech-pesca-APK" (viene en un .zip con el app-debug.apk dentro).
+7. Pasa el APK al celular e instalalo (Android pide permitir
+   "instalar apps desconocidas").
+
+Para cambiar la app mas adelante, edita www/index.html y vuelve a correr el paso 5.
